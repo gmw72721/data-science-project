@@ -1,0 +1,226 @@
+---
+title: "Pedagogy"
+author: "Gavin Williams"
+date: "2/11/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(ggplot2)
+```
+
+## Introduction and Problem Background
+
+In this analysis we will look at what factors improve student learning in an introductory statistics class taught at Brigham Young University. Ideally, the only learning activities that should be done are ones that help students learn the material better. The way that we will access how much a student has learned is their score on their final exam. This exam is supposed to be a measure of a students mastery of the course content. If a learning activity does not improve a students final exam, then the Statistics department should look into stop that learning activity to focus more on learning activities that do help improve a student's final exam score. We can know if a learning activity does improve a students mastery f the material if there is a positive relationship between the class' average score on that in class activity and the class' average score on the final exam.
+
+The learning activities that are currently done in this introductory statistics course are:
+
+1. Homework assignments
+2. In class quizzes
+3. Three exams
+
+We are particularly interested in assessing if the in class quizzes are helpful in student's mastery in the material These quizzes are often seen as inconvenient for students as they require the purchase of a device called an Iclicker, so if this learning activity doesn't improve a student's mastery of the material we want to know that.
+
+In addition to our other goals, we are also interested to see if any semesters there we abnormally low average scores on the final exam. If this is the case, we would like to investigate why this was the case. 
+
+To help us see some patterns in the data we first looked at some plots that showed relationships between each learning activity and average final exam score. The first plot is the relationship between average in class quiz score and average final exam score. We can see that there seems to be a linear relationship between the two. This relationship also seems to be pretty strong. Another interesting plot is average score on exam 3 with average score on the final. This exam has the greatest relationship with the average final score on the final. The last graphic is the average score on the final exam by semester. There does seem to be a different average score n the final exam by semester. For example, semester 3 is has a much higher median average exam score versus semester 1. However, there are only 3 classes taught per semester, so this is a pretty small sample size.
+
+Looking at the data, it appears like everything is pretty linearly related, so we decided to fit a multiple linear regression model to the data. One caveat is that because of the way the data was collected, an equal variance model may not work perfectly. The results that we have are averages from classes that had different amounts of students. Because of this, average final exam scores from classes with more students are going to have less variability than classes that have less students. 
+
+To account for this, we will be using a multiple linear regression model that uses fixed weights that are the inverse of the number of students in the class to calculate variability around the regression line. Using this model will help us answer all the research question we have above as we will be able to make inference about the effect of each learning activity, and this model will help us fix the problem of unequal variance as we will account for that using fixed weights in our regression model. Also, using our model we will be able to say how much of an effect each learning activity has on impacting the average final exam score in the class and we will be able to suggest whether or not that activity should be continued. 
+
+
+```{r}
+Class <- read.csv("~/Desktop/Stat 469/ClassAssessment.txt", sep="")
+
+ggplot2::ggplot(data = Class, mapping = ggplot2::aes(x = Exam1, y = Final)) +
+   ggplot2::geom_point() +
+   ggplot2::ylab("Average Score on Final Exam") +
+   ggplot2::xlab("Average Score on Exam 1")
+
+ggplot2::ggplot(data = Class, mapping = ggplot2::aes(x = Exam2, y = Final)) +
+ ggplot2::geom_point() +
+ ggplot2::ylab("Average Score on Final Exam") +
+ ggplot2::xlab("Average Score on Exam 2")
+
+ggplot2::ggplot(data = Class, mapping = ggplot2::aes(x = HW, y = Final)) +
+  ggplot2::geom_point() +
+  ggplot2::xlab("Average Score on Homework") + 
+  ggplot2::ylab("Average Score on Final Exam") 
+
+ggplot2::ggplot(data = Class, mapping = ggplot2::aes(x = Exam3, y = Final)) +
+  ggplot2::geom_point() +
+  ggplot2::xlab("Average Score on Exam 3") + 
+  ggplot2::ylab("Average Score on Final Exam") 
+
+ggplot2::ggplot(data = Class, mapping = ggplot2::aes(x = Quiz, y = Final)) +
+  ggplot2::geom_point() +
+  ggplot2::xlab("Average Score on in Class Quizzes") + 
+  ggplot2::ylab("Average Score on Final Exam") 
+
+ggplot2::ggplot(data = Class, mapping = ggplot2::aes(x = as.factor(Semester), y = Final)) +
+  ggplot2::geom_boxplot() +
+  ggplot2::xlab("Semester Number") + 
+  ggplot2::ylab("Average Score on Final Exam") 
+```
+
+## Statistical Model
+We will use the following to model the data:
+
+$y \sim MVN(X*\beta, \sigma^2*D)$ 
+
+in matrix form or in vector form
+
+$$
+\left(\begin{array}{cc} 
+y_1\\
+y_2\\
+y_3\\
+y_4\\
+y_5\\
+...\\
+y_n
+\end{array}\right)
+=
+\left(\begin{array}{cc} 
+1 & x_{Exam11} &...& x_{Quiz1}  \\
+1 & x_{Exam12} &... &x_{Quiz2}  \\
+1 & x_{Exam13} &... &x_{Quiz5}  \\
+1 & x_{Exam14} &... &x_{Quiz4}  \\
+1 & x_{Exam15} &...& x_{Quiz5} \\
+... & ... & ... & ...\\
+1 & x_{Exam1n} &... &  x_{Quizn} 
+\end{array}\right)
+*
+\left(\begin{array}{cc} 
+\beta_{0}\\
+\beta_{Exam1} \\
+\beta_{Exam2} \\
+\beta_{Exam3}\\
+\beta_{HW}\\
+....\\
+\beta_{Quiz}
+\end{array}\right)
++
+\left(\begin{array}{cc} 
+\epsilon_1\\
+\epsilon_2\\
+\epsilon_3\\
+\epsilon_4\\
+\epsilon_5\\
+...\\
+\epsilon_n
+\end{array}\right)
+$$
+
+where:
+
+y is a vector of all observed average final exam scores. 
+
+X is a matrix of all observed values of all aveage scores from each learning activities
+
+$\beta$ is a vector of all beta coefficients. For example $\beta_{Exam1}$ is how much increase there will be in average final exam score, when average exam 1 scores goes up by 1 percentage point.
+
+$\epsilon$ is a vector of errors, or how far each prediction of average final score will be off on average and comes from a normal distribution with a mean of zero and a variance of $\sigma^2$D. 
+
+$\sigma^2$ is the variance constant about our regression line, or how far off our fitted values are from our observed values on average after they are multiplied by the diagonal matrix. 
+
+D is a diagonal matrix where $d_ii$ = $1/NStudents$ which is the inverse of the number of students in the class
+
+We can only use this model to do statistical inference on the effect of each learning activity if the assumptions are met in the model. We must assume that that each learning activity is linearly related to average final exam score. We also have to assume that the standardized residuals are both normally distributed and have equal variance. The residuals must be standardized since our model account for the unequal variance using fixed weights and standardized residuals take that into account. The last assumption is that each classes final exam score is unrelated to each other. These assumptions are 
+
+```{r}
+Var_Class <- nlme::gls(model= Final ~ Exam1 + Exam2 + Exam3 +  HW + Quiz + as.factor(Semester), data =Class , weights=nlme::varFixed(value = ~ 1/NStudents), method="ML") #Het Model using fixed weights
+
+```
+## Model Validation
+
+
+```{r}
+#car::avPlot(Var_Class)
+plot(Var_Class$fitted, resid(Var_Class, type = "pearson"))
+hist(resid(Var_Class, type = "pearson"))
+```
+
+To test for the assumptions that we assumed in the previous section we created 3 plots. For linearity, the first plot that we did was the added variable plot. In this plot we see that although it isn't perfect, we can assumed that it is linear because the residuals are evenly distributed along the line. For normality the next plot we did was the histogram of standardized residuals plot. In this plot we see that the residuals closely follow a normal distribution so therefore normality is correct. For variance, the final plot that we made was the fitted vs residuals plot. In this plot although it isn't perfect we can assume that after apply our variance function we can therefore infer that the residuals are homoscedastic. We cant test for independence but we can conclude that there is independence in the  final exam scores and that they are unrelated to each other because each student is only in one class. Since all of our assumptions hold true we can use this model.
+
+
+
+
+
+
+
+```{r}
+ 
+
+#find SST and SSE
+  sst <- sum((y - mean(y))^2)
+  sse <- sum((soldprice_predicted - y)^2)
+  
+  #find R-Squared
+  rsq <- 1 - sse/sst
+```
+
+```{r}
+summary(Var_Class)
+```
+
+```{r}
+n.cv <- 100 #Number of CV studies to run
+n = nrow(Class)
+n.test <- n * 0.4
+rpmse <- rep(x=NA, times=n.cv)
+bias <- rep(x=NA, times=n.cv)
+wid <- rep(x=NA, times=n.cv)
+cvg <- rep(x=NA, times=n.cv)
+for(cv in 1:n.cv){
+  ## Select test observations
+  test.obs <- sample(x=1:n - 1, size=n.test)
+  
+  ## Split into test and training sets
+  test.set <- Class[test.obs,]
+  train.set < Class[-test.obs,]
+  
+  ## Fit a lm() using the training data
+  class.lm <- nlme::gls(model= Final ~ Exam1 + Exam2 + Exam3 +  HW + Quiz + as.factor(Semester), data = train.set, weights = nlme::varFixed(value = ~ 1/NStudents), method="ML")
+  
+  ## Generate predictions for the test set
+  my.preds <- predictgls(glsobj=class.lm, newdframe = test.set, level = .95)
+  
+  ## Calculate bias
+  bias[cv] <- mean(my.preds[,'Prediction']-test.set[['Final']])
+  
+  ## Calculate RPMSE
+  rpmse[cv] <- (test.set[['Final']]-my.preds[,'Prediction'])^2 %>% mean() %>% sqrt()
+  
+  ## Calculate Coverage
+  cvg[cv] <- ((test.set[['DomesticGross']] > my.preds[,'lwr']) & (test.set[['DomesticGross']] < my.preds[,'upr'])) %>% mean()
+  
+  ## Calculate Width
+  wid[cv] <- (my.preds[,'upr'] - my.preds[,'lwr']) %>% mean()
+  
+}
+
+```
+
+## Analysis Results
+```{r}
+summary(Var_Class)$tTable
+```
+
+By observing the tTable above we see that Exam 1, Exam 2, Exam 3 and Homework all have p-values under 0.05. Therefore for each of them we can reject the null hypothesis and conclude that Exam 1, Exam 2, Exam 3 and Homework all have and impact on improved learning. The smallest P-Value that we got was 2.493146e-09 which means that if the coefficient for Exam 3 is zero it would be rare for use to get a coefficient that big. Therefore Exam 3 has the most effect with an effect of 0.4437. For Exam 1 the effect is 0.1843. For Exam 2 the effect is 0.30, For the Homework the effect is 0.34.
+
+The class activities that explain student learning the most are
+
+Because none of the semesters have a pvalue less than 0.05 therefore there are no semesters that are better or worse in terms of student learning
+
+## Conclusion
+
+  After conducting our analysis we can conclude that the activities that have an improved impact on learning are the 3 exams and the homework. The three exams make sense because if a student does well on an exam you would expect him to do well on the Final. The same thing can be said about the Homework as well. If they did well on the homework they would probably do well on the exam. However we can conclude that the quizzes don't have any impact in improved learning as well as the semester that the student is in. The statistic department should be relieved that the semester a student is in doesn't impact improved learning because that means that each student is treated fairly. However since quizzes dont have an impact in improved learning then the statistics department should stop conducting the quizzes. By doing this it wont only save the profesors time in designing the quiz but also the students money because then they don't need to buy an iclicker for the quiz.

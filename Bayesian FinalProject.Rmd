@@ -1,0 +1,260 @@
+---
+title: "Stat 251 Final Project"
+author: "Gavin Williams"
+date: "4/10/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, fig.width=3, fig.height=3,echo = FALSE)
+
+
+library(MCMCpack)
+```
+
+
+
+```{r}
+donovan_mitchell <- read.csv("C:\\Users\\mikew\\Downloads\\donovan_mitchell.csv")
+donovan_mitchell$PTS = as.numeric(sub("(.+= )([0-9\\.]+)(.+)", "\\2", donovan_mitchell$PTS , perl = T, ))
+donovan_mitchell = na.omit(donovan_mitchell['PTS'])
+donovan_mitchell = as.list(donovan_mitchell)$PTS 
+
+devin_booker <- read.csv("C:\\Users\\mikew\\Downloads\\devin_booker.csv")
+devin_booker$PTS = as.numeric(sub("(.+= )([0-9\\.]+)(.+)", "\\2", devin_booker$PTS , perl = T))
+devin_booker = na.omit(devin_booker['PTS'])
+devin_booker = as.list(devin_booker)$PTS 
+```
+#Introduction
+
+The NBA regular season has just finished, and the teams that will be facing off in the playoffs have been locked in. Our analysis will be centered on two players, each player from one of two teams that are in the playoffs. The two players are Donovan Mitchell from the Utah Jazz and Devin Booker from the Phoenix Suns. They have many things in common, making them perfect candidates for an analysis like this. Both are shooting guards and are considered to be two of the best players at their position in the league. 
+
+For this analysis, we will be using the points per game scored by each player for this current season (2021-2022). We want to find the difference between the means and variances of each players points per game to see who is a better player. Attempting to discover which player is better at the game is useful for each respective team when deciding to make trades for other players. This analysis can also be replicated to compare any two players, and any relevant gameplay statistic. The data was scraped from basketball reference.com.
+
+
+
+#Methods
+
+The distribution we are using for the likelihood is the normal distribution. Our data is approximately normal making the likelihood an appropriate distribution to use (histograms in appendix). We are using two prior distributions in our analysis. A normal prior to model the mean, and an inverse gamma to model the variance. A normal is appropriate for the mean because means are normally distributed, and the inverse gamma is often used as a prior for the variance because of some nice properties. 
+
+```{r, figures-side, fig.show="hold", out.width="50%"}
+curve(dnorm(x, 26, 8),from = 0, to = 55)
+
+gamma <- 10.33333
+phi <- 46.6666
+curve(dinvgamma(x, gamma, phi), from = 0, to = 40)
+```
+
+
+
+The prior parameters for the mean were chosen because we assumed that on any given night, both players were likely to score somewhere between 20-30 points. So we chose 26 for the mean, and 8 seemed like a reasonable standard deviation to accompany it.
+
+As for the inverse gamma, we derived 10.333 and 46.666 as our gamma and phi parameters. We arrived at these numbers by choosing 5 as a mean for the variance, and 3 as a standard deviation. These seemed reasonable for our inverse gamma prior. 
+
+
+
+
+
+
+
+Donovan Mitchell Summary Data
+(MEAN        SD       MAX     MIN)
+```{r}
+mean(donovan_mitchell)
+sd(donovan_mitchell)
+max(donovan_mitchell)
+min(donovan_mitchell)
+```
+
+
+Devin Booker Summary Data
+(MEAN        SD       MAX     MIN)
+
+```{r}
+mean(devin_booker)
+sd(devin_booker)
+max(devin_booker)
+min(devin_booker)
+
+```
+
+
+#Results
+
+
+```{r}
+#prior mean
+lambda <- 25
+tau2 <- 8
+
+#prior sd
+mean <- 5
+var <- 3
+```
+
+
+```{r}
+
+
+# true.a = 0 
+# true.b = 0
+# #prior
+# a = 2
+# b = (a - 1) * mean 
+# while((b^2/((a-1)^2 * (a-2))) > var){
+#   b = (a - 1) * mean 
+#   testvar =  (b^2/((a-1)^2 * (a-2)))
+#   if(var < testvar){
+#     true.a = a
+#   }
+#   a = a+0.00001
+# }
+# 
+# true.b = (true.a - 1) * mean
+# 
+# gamma = true.a
+# phi = true.b
+# 
+# # test
+# true.b/(true.a - 1)
+# (true.b^2/((true.a-1)^2 * (true.a-2)))
+# #gamma
+# #phi
+```
+
+
+
+
+```{r}
+set.seed(21)
+mu_mitchell = 25
+mu_booker = 25
+
+sigma2_mitchell = 7.6
+sigma2_booker = 7.6
+
+n_mitchell <- length(donovan_mitchell)
+n_booker <- length(devin_booker)
+
+iters <- 10000
+mu_mitchell.save <- rep(0, iters)
+mu_booker.save <- rep(0, iters)
+
+mu_mitchell.save[1] <- mu_mitchell
+mu_booker.save[1] <- mu_booker
+
+
+sigma2_mitchell.save <- rep(0, iters)
+sigma2_booker.save <- rep(0, iters)
+
+sigma2_mitchell.save[1] <- sigma2_mitchell
+sigma2_booker.save[1] <- sigma2_booker
+
+#Gibbs Sampling Algorithm
+for(t in 2:iters){
+  
+  n = n_mitchell 
+  lambda.p <- (tau2*sum(donovan_mitchell) + sigma2_mitchell*lambda)/(tau2*n + sigma2_mitchell)
+  tau2.p <- sigma2_mitchell*tau2/(tau2*n + sigma2_mitchell)
+  mu_mitchell <- rnorm(1, lambda.p, sqrt(tau2.p))
+  mu_mitchell.save[t] <- mu_mitchell
+  
+  n = n_booker
+  lambda.p <- (tau2*sum(devin_booker) + sigma2_booker*lambda)/(tau2*n + sigma2_booker)
+  tau2.p <- sigma2_booker*tau2/(tau2*n + sigma2_booker)
+  mu_booker <- rnorm(1, lambda.p, sqrt(tau2.p))
+  mu_booker.save[t] <- mu_booker
+  
+  
+  n = n_mitchell
+  gamma.p <- gamma + n/2
+  phi.p <- phi + sum((donovan_mitchell - mu_mitchell)^2 )/2
+  sigma2_mitchell <- rinvgamma(1, gamma.p, phi.p)
+  sigma2_mitchell.save[t] <- sigma2_mitchell
+  
+  n = n_booker
+  gamma.p <- gamma + n/2
+  phi.p <- phi + sum((devin_booker - mu_booker)^2 )/2
+  sigma2_booker <- rinvgamma(1, gamma.p, phi.p)
+  sigma2_booker.save[t] <- sigma2_booker
+  
+}
+
+```
+
+
+```{r}
+#par(mfrow=c(2,2))
+#plot(mu_mitchell.save[0:500], type='l')
+#plot(mu_booker.save[0:10000], type='l')
+#plot(sigma2_mitchell.save[0:200], type='l')
+#plot(sigma2_booker.save[0:200], type='l')
+
+```
+
+
+These are the posterior distributions of the difference between Donovan Mitchell's and Devin Booker's average points scored, as well as the difference between the variances. 
+$$ \pi(-0.478\space | \space Data) \space \space \pi(-15.643 \space | \space Data)$$
+
+
+
+Posterior Distributions 
+```{r, figures-side2, fig.show="hold", out.width="50%"}
+plot(density(mu_mitchell.save-mu_booker.save), xlab=expression(mu[1]-mu[2]), ylab="density", main=expression(pi(mu[1]-mu[2]~"|"~"data")))
+
+plot(density(sigma2_mitchell.save-sigma2_booker.save), xlab=expression(sigma[1]^2-sigma[2]^2), ylab="density", main=expression(pi(sigma[1]^2-sigma[2]^2~"|"~"data")))
+```
+
+
+\newpage
+
+Posterior Means and Variances
+
+```{r}
+mean(mu_mitchell.save-mu_booker.save)
+var(mu_mitchell.save-mu_booker.save)
+
+mean(sigma2_mitchell.save -sigma2_booker.save)
+var(sigma2_mitchell.save -sigma2_booker.save)
+
+```
+Posterior Probability Intervals
+```{r}
+quantile(mu_mitchell.save-mu_booker.save, c(.025, .975))
+```
+
+Given the data and prior knowledge, there is a 95% chance that the true mean difference in points scored per game is between -2.8913 and 1.9501. There is not enough evidence to say there is a difference between the means.
+
+```{r}
+quantile(sqrt(sigma2_mitchell.save)-sqrt(sigma2_booker.save), c(.025, .975))
+```
+
+Given our data and prior knowledge, the true difference in standard deviation lies between -2.5746 and 0.5958. There's not enough evidence to say there is a difference between the two. 
+
+
+#Conclusion
+There is not enough evidence for us to say that Donovan Mitchell is better than Devin Booker, in regards to their points per game. The data did not change our knowledge very much. We had a fair estimate for our prior, so our prior is very similar to our posterior. 
+
+Our study was limited by the fact that we only chose one variable to influence our analysis. In future studies, it would benefit us more to take into account assists, 3 point percentage, field goal percentage, etc. This would be a more complete analysis, and may aid us in finding a possible difference between the two players. It would also be interesting to compare other players, as this study can be replicated to do just that. 
+
+
+
+\newpage
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+
+```

@@ -1,0 +1,154 @@
+---
+title: "Particulate Matter Exposure"
+author: "Gavin Williams"
+date: "3/16/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F, cache = T)
+library(nlme)
+source("~/Desktop/Stat 469/stdres.gls.R")
+```
+
+## Introduction
+
+Exposure to particulate matter (PM) in the air can be very harmful to children and can cause adverse effects such as aggravating asthma, premature death, and decreased lung function. For this reason, scientists have been trying to estimate how much PM each child in a community is exposed to. In the past it has been assumed that getting a measurement of the PM in the outside environment in an area could predict how much PM children are exposed to, but one problem with this is that children have very different habits. Some spend much of their time outside, while some spend more time inside. Because of this, a study was run to determine how much PM children where exposed to inside their homes. Children were measured over time and a device on their chest measured how much PM they were being exposed to. There was also a stationary measurement of PM inside the house. Along with this data, a GoPro looked at what activity they were doing. 
+
+In this study the measurement on the child chest is the measure of the true amount of PM the child intakes, and all other variables will be used to predict this. Our goal is to see if the stationary measurement of PM predicts how much PM the child is exposed to as well as seeing if the activity has any impact. We also want to see if there is any difference in the affect of the activity the child is doing from child to child. If this were the case it would be hard to say that any activity is going to cause increased PM exposure across all children. 
+
+Below we can see a couple of plots that show the impact of activity and the stationary measurement on the measurement on the child's vest. We can see from the box plot, that, on average, each activity seems to impact the PM intake of a child the same. From the plot of the natural logarithm of the PM intake of the child and the natural log of the PM measurement at the stationary machine. 
+
+```{r}
+library(tidyverse)
+PM <- read.csv("~/Desktop/Stat 469/BreathingZonePM.txt", sep="", stringsAsFactors = TRUE)
+PM$ID <- as.factor(PM$ID)
+PM
+ggplot2::ggplot(data = PM, mapping = ggplot2::aes(y = log(Aerosol), x = log(Stationary)  )) + ggplot2::geom_point() + ggplot2::xlab("Stationary Monitor PM Measurement") + ggplot2::ylab("PM Measurement on Childs Vest") + ggplot2::geom_smooth(se= F, method = lm)
+
+ggplot2::ggplot(data = PM, mapping = ggplot2::aes(y = log(Aerosol), x = Activity )) + ggplot2::geom_boxplot() + ggplot2::xlab("Stationary Monitor PM Measurement") + ggplot2::ylab("PM Measurement on Childs Vest")
+
+```
+
+The reason we look the natural log of the PM measurement is because without doing this, the data was non linear. If we ignored this fact, then fitting a linear model would not be appropriate and the estimates of our beta coefficients would have inflated standard errors. 
+
+Another concern we should take care of before we do an analysis is the fact that there are multiple measurements over time for each child over time. If we measure the same child over and over again, we'd expect their to be some correlation between these observations. We can check this by fitting a model that does not account for this correlation and see how correlated the residuals are for each child. The correlation matrix for a linear model that does not include anything to account for correlation within each child shows that there is a ton of correlation in the residuals after the model is fit. This matrix was calculated, but not shown, as it is a very large matrix. If we ignore this fact, then our standard errors are going be inflated because we have more information that we are not taking into account. 
+
+```{r}
+lm_model <- lm( log(Aerosol) ~ log(Stationary) + Activity + ID:Activity + ID + ID:log(Stationary), data = PM)
+Correlation_matrix <- matrix(lm_model$residuals, ncol = 60, nrow =  nrow(PM), byrow = T) 
+```
+
+
+A model that could help us answer all of our research questions is a longitudinal multiple linear regression model. Longitudinal means that we account for the correlation for each child using an correlation structure that will help estimate any correlation in the residuals after the model is fit. When we are able to know the correlation structure that each child follows, we will be able to make it so our residuals are no longer dependent which means we will no longer have any problems with the standard errors being too high anymore.  This model will also provide us with coefficients that will let us see how well the stationary monitor does at predicting true PM intake as will as the activity the child is engaged in. Our model will also include an interaction term for activity and child and stationary monitor and child which will help us see if any of these effects are child specific. This will help us answer all research questions that we have for this problem. 
+
+
+```{r}
+aersol ~ Actibvity + Stationary + Stationary:Child 
+
+
+ARMAMODEL <- nlme::gls(model=log(Aerosol) ~ Activity + log(Stationary) + Activity:ID + ID + ID:log(Stationary), data=PM, correlation=nlme::corARMA(form=~ Minute | ID,  p = 1, q = 1), method="ML")
+
+AIC(ARMAMODEL)
+
+```
+## Mathmatical Model
+
+A model that could help us understand this data could be:
+
+$y \sim MVN(X*\beta, \sigma^2*B)$ 
+
+where:
+
+y is a vector of all observed log PM measurements for all children, sixty for each child across an hour.
+
+X is the design matrix with a column of ones and then all observed values for activity, log stationary PM measurement, and the interaction between each child and activity across each child over the hour.
+
+$\beta$ is a vector of beta coefficients for the covariates of which activity, log stationary PM measurement, and the interaction term , where, for example, $\beta_{log Stationary}$ is the amount log PM measurement will increase when log stationary PM measurement increases by one, holding all else constant.
+
+$\sigma^2$ is the variance constant which when multiplied by B gives us our covariance matrix for our model. 
+
+B is a block diagonal matrix where each block is the correlation structure for each child over time estimated using a ARMA(p = 1,q = 1) correlation structure. Each block is a 60 by 60 matrix showing correlation across time. 
+
+In order for this model to be useful, it needs to meet some assumptions. First of all, all the co variate must be linearly related to the log measurement of PM exposure for the child. This assumption msut be met because all our beta vector for out model is linear. A second assumption that must be met is that the standardized, de correlated residuals must be normal. This assumption msut be met since the likelihood distribution about our regression line is specified to be normal. A third assumption is that there must be equal variance in the standardized, de correlated residuals. THis is because in our block matrix we specify that there is equal variance. The last assumption is that de correlated, standardized residuals must be independent of one another. In a standard multiple linear regression model we should that this assumption was not met, but when we include the correlation within each child over time in our model, this assumption should be met. 
+
+
+## MODEL VALIDATION
+
+To test for the assumptions that we assumed in the previous section we created 3 plots and one correlation matix. 
+
+For linearity, because we only have one quantitative varriable the first plot that we made was a scatter plot of log of Aerosol and log of Stationary. We then added a fitted line and we see that log of stationary has a linear effect on log of aerosol therefore we can conclude that this assumption has been met.
+```{r}
+ggplot2::ggplot(data = PM, mapping = ggplot2::aes(y = log(Aerosol), x = log(Stationary)  )) + ggplot2::geom_point() + ggplot2::xlab("Stationary Monitor PM Measurement") + ggplot2::ylab("PM Measurement on Childs Vest") + ggplot2::geom_smooth(se= F, method = lm)
+```
+
+For normality the next plot we did was the histogram of standardized residuals plot. The residuals don't seem to perfectly follow a normal distribution, but we see that the residuals are unimodal and are somewhat symmetric and since we only have 30 data points, we can assume the residuals are normal.
+
+```{r}
+ggplot(data = PM, aes(x= stdres.gls(ARMAMODEL))) + geom_histogram()
+```
+
+For the equal variance assumption, the final plot that we made was the fitted vs residuals plot. In this plot although it isn't perfect we can assume that the residuals are homoscedastic.
+
+```{r}
+ggplot(data = PM, aes(x= ARMAMODEL$fitted, y = stdres.gls(ARMAMODEL))) + geom_point()
+```
+
+Finally for independence we made a correlation matrix. We can see that after we applied a ARMA(p = 1,q = 1) correlation structure there turns out to be little to no correlation and therefore we can conclude that there is independence.
+
+### double check this
+
+```{r}
+Correlation_matrix <- matrix(stdres.gls(ARMAMODEL), ncol = 60, nrow =  nrow(PM), byrow = T) 
+
+
+
+(mean(cor(Correlation_matrix)>0.20) + mean(cor(Correlation_matrix)< -0.20) - mean(cor(Correlation_matrix)> 0.99))/(1 - mean(cor(Correlation_matrix)> 0.99))
+
+```
+
+After using the child ID number, the PM measurement of the stationary monitor, the activity the child was engage in and the minute the child was wearing the vest in the model we can see that it does do a pretty good job at explaining the PM measurement on the child’s vest. The R squared value for this model is .9155, meaning about 92 percent of the variability in th PM measurement on the child’s vest can be explained by the parameters that we included in the model. This is a super high percentage and therefore we can conclude that our model does well at explaining the data.
+
+
+#Analysis Results
+
+
+With just using a linear model of  log of stationary explaining log of Aersol we got an R squared around 0.002 which means that 0.2% of the variation in log of stationary explain log of Aerosol. Thisvtells us that the stationary measurement alone does not do a good job explaining PM exposure. Actually it hardly explains it
+
+
+```{r}
+#1)
+lm_model_stationary = nlme::gls(model=log(Aerosol) ~ log(Stationary), data=PM, correlation=nlme::corARMA(form=~ Minute | ID,  p = 1, q = 1), method="ML")
+cor(lm_model_stationary$fitted,log(PM$Aerosol) )^2
+```
+
+
+If we use a linear model with activities the student is in and log of stationary to explain log of Aerosol we get an r squared of around 0.007 which means that 0.7% of the variation in activities and log of stationary explain log of Aerosol. This number is very low but it is better than the r squared that we got previously. As such activities explain more of the aerosol intake than just stationary alone.
+
+
+
+
+```{r}
+#2)
+lm_model_stationary = nlme::gls(model=log(Aerosol) ~ log(Stationary) + Activity, data=PM, correlation=nlme::corARMA(form=~ Minute | ID,  p = 1, q = 1), method="ML")
+cor(lm_model_stationary$fitted,log(PM$Aerosol) )^2
+```
+
+
+
+#3)
+
+Since all of the confidence intervals on the different type of activities include 0 then that means that none of the activities on average lead to a higher PM Exposure. It is only when we include the interaction that the activities explain more of the model.
+```{r}
+#4)
+confint(ARMAMODEL)[2:8,]
+
+```
+
+# Conclusion
+
+After conducting our analysis we can conclude that stationary measurement alone does a horrible job at explaining PM exposure because of the very low r squared value that we got. We can also conclude that if we put activities into the model we still result in a model that does horrible job at explaining PM exposure. When detecting if there is an interaction between activities and child or an interaction between The PM measurement of the stationary monitor and child we saw that there is an interaction between activioes and child but there is not an interaction between the The PM measurement of the stationary monitor and child. Finally we looked to see if activities on average across children lead to higher PM exposure and we found that no activities lead to higher PM Exposure.
+
+
